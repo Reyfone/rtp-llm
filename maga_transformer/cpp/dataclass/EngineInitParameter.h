@@ -88,7 +88,9 @@ public:
 
     std::unique_ptr<ft::Weights>
     createGptWeights(std::unique_ptr<ConstBufferPtrMaps> layer_weights,
-                     std::unique_ptr<ConstBufferPtrMap>  global_weight);
+                     std::unique_ptr<ConstBufferPtrMap>  global_weight,
+                     py::object *py_layer_weights = nullptr,
+                     py::object *py_global_weight = nullptr);
 
 
     // TODO(): rm old impl init

@@ -261,8 +261,15 @@ std::unique_ptr<ft::Weights>
 WeightsConverter::createGptWeights(py::object layer_weights,
                                    py::object global_weight)
 {
+#if defined(__aarch64__)
+    return std::move(createGptWeights(std::move(convertLayerWeights(std::move(convertLayerWeights(layer_weights)))),
+                                      std::move(convertGlobalWeight(std::move(convertGlobalWeight(global_weight)))),
+                                      &layer_weights,
+                                      &global_weight));
+#else
     return std::move(createGptWeights(std::move(convertLayerWeights(layer_weights)),
                                       std::move(convertGlobalWeight(global_weight))));
+#endif
 }
 
 std::unique_ptr<ft::Weights>
@@ -275,7 +282,9 @@ WeightsConverter::createGptWeights(std::unique_ptr<TensorMaps> layer_weights,
 
 std::unique_ptr<ft::Weights>
 WeightsConverter::createGptWeights(std::unique_ptr<ConstBufferPtrMaps> layer_weights,
-                                   std::unique_ptr<ConstBufferPtrMap>  global_weight)
+                                   std::unique_ptr<ConstBufferPtrMap>  global_weight,
+                                   py::object *py_layer_weights,
+                                   py::object *py_global_weight)
 {
     auto        layers_weights = *layer_weights;
     ft::Weights gpt_weights;
@@ -298,7 +307,11 @@ WeightsConverter::createGptWeights(std::unique_ptr<ConstBufferPtrMaps> layer_wei
                                                              W::final_ln_beta);
     gpt_weights.lm_head = mayCreateDenseWeights(*global_weight,
                                                  W::lm_head);
-
+#if defined(__aarch64__)
+    py_global_weight->attr("pop")(W::lm_head);
+    ssize_t i = 0;
+    py::list py_layer_weights_list = py::reinterpret_borrow<py::list>(*py_layer_weights);
+#endif
     gpt_weights.linear_bias_slopes = mayCreateDenseWeights(*global_weight, W::linear_bias_slopes);
 
     for (auto& layer_weights : layers_weights) {
@@ -325,14 +338,20 @@ WeightsConverter::createGptWeights(std::unique_ptr<ConstBufferPtrMaps> layer_wei
         layer_ws.post_layernorm_2 = mayCreateLayerNormWeights(layer_weights, W::post_ln_2_gamma, W::post_ln_2_beta);
 
         layer_ws.self_attention_weights = createAttentionWeights(layer_weights);
+#if defined(__aarch64__)
+        py_layer_weights_list[i].attr("pop")(W::attn_qkv_w);
+        py_layer_weights_list[i].attr("pop")(W::attn_o_w);
+#endif
         layer_ws.ffn_weights = createFfnWeights(layer_weights);
+#if defined(__aarch64__)
+        py_layer_weights_list[i].attr("pop")(W::ffn_w1);
+        py_layer_weights_list[i].attr("pop")(W::ffn_w2);
+        py_layer_weights_list[i++].attr("pop")(W::ffn_w3);
+#endif
         gpt_weights.layers.emplace_back(std::move(layer_ws));
     }
     return std::make_unique<ft::Weights>(gpt_weights);
 }
-
-
-
 
 /////////////////////////////////deprected///////////////////////////
 
